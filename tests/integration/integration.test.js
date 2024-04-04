@@ -41,7 +41,6 @@ function waitFor(functionReturningPromise, ms = 10000) {
         const invokeFunction = () =>
             functionReturningPromise()
                 .then((result) => {
-                    console.log(result);
                     if (result) {
                         clearTimeout(invokerTimeout);
                         clearTimeout(timeout);
@@ -80,7 +79,27 @@ async function waitForApp(app) {
     return { app, window };
 }
 
-process.env.PLUGIN_VERSION = '1.7.0';
+/**
+ * Because the test app's meteor-desktop node module is installed locally, electronBuilder will look
+ * for relative paths in the meteor-desktop project directory instead of in the test app. This leads
+ * to "InvalidConfigurationError: cannot find specified resource" errors.
+ * @param {string} settingJsonPath - path to test app's .desktop/settings.json
+ */
+function makeMandatoryPathsInBuilderSettingsAbsolute(settingJsonPath) {
+    const settingJson = JSON.parse(fs.readFileSync(settingJsonPath));
+
+    const dmgOptions = settingJson && settingJson.builderOptions && settingJson.builderOptions.dmg;
+    if (!dmgOptions) return;
+
+    if (dmgOptions.icon && !path.isAbsolute(dmgOptions.icon)) {
+        dmgOptions.icon = path.join(appDir, dmgOptions.icon);
+    }
+    if (dmgOptions.background && !path.isAbsolute(dmgOptions.background)) {
+        dmgOptions.background = path.join(appDir, dmgOptions.background);
+    }
+
+    fs.writeFileSync(settingJsonPath, JSON.stringify(settingJson, null, 2));
+}
 
 describe('desktop', () => {
     let MeteorDesktop;
@@ -151,8 +170,9 @@ describe('desktop', () => {
                 await waitForApp(app);
                 const title = await app.client.getTitle();
                 expect(title).to.equal('test-desktop');
-                const text = await app.client.getText('h1');
-                expect(text).to.equal('Welcome to Meteor!');
+                const h1Element = await app.client.$('h1');
+                const h1Text = await h1Element.getText();
+                expect(h1Text).to.equal('Welcome to Meteor!');
             } catch (e) {
                 console.log(e);
                 console.log(e.trace);
@@ -182,8 +202,8 @@ describe('desktop', () => {
         it('expose electron modules', async () => {
             const platformsPath = path.join(appDir, '.meteor', 'platforms');
             let platforms = fs.readFileSync(platformsPath);
-            if (!platforms.includes('android')) {
-                platforms += '\nandroid\n';
+            if (!platforms.includes('android') && !platforms.includes('ios')) {
+                platforms += process.platform === 'darwin' ? '\nios\n' : '\nandroid\n';
                 fs.writeFileSync(platformsPath, platforms);
             }
 
@@ -218,10 +238,10 @@ describe('desktop', () => {
             await runIt();
 
             // Test the exposedModules functionality.
-            const result = await app.client.execute(
+            const currentFrameZoomFactor = await app.client.execute(
                 () => Desktop.electron.webFrame.getZoomFactor()
             );
-            expect(result.value).to.equal(1);
+            expect(currentFrameZoomFactor).to.equal(1);
         }).timeout(10 * 60000);
 
         it('should build installer', async () => {
@@ -242,6 +262,8 @@ describe('desktop', () => {
             if (fs.existsSync(path.join(appDir, MeteorDesktop.env.paths.installerDir))) {
                 shell.rm('-rf', MeteorDesktop.env.paths.installerDir);
             }
+
+            makeMandatoryPathsInBuilderSettingsAbsolute(MeteorDesktop.env.paths.desktop.settings);
 
             // Build the installer.
             try {

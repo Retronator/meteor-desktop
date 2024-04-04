@@ -27,26 +27,26 @@ To migrate from the original `meteor-desktop`:
 
 ## Prerequisites
 
- - Meteor >= `1.4`
+ - Meteor >= `1.12.1`
  - at least basic [Electron](http://electron.atom.io/) framework knowledge
  - mobile platform added to project<sup>__*1__</sup>  
 
 <sup>__*1__ you can always build with `--server-only` if you do not want to have mobile clients,  you do not actually have to have android sdk or xcode to go on with your project</sup>
 
-### Quick start
+## Quick start
 ```bash
- cd /your/meteor/app
- meteor npm install --save-dev @meteor-community/meteor-desktop
- # you need to have any mobile platform added (ios/android)
- meteor --mobile-server=127.0.0.1:3000
+cd /your/meteor/app
+meteor npm install --save-dev @meteor-community/meteor-desktop
+meteor add-platform ios # or android
+npm run desktop -- init
 
- # open new terminal
+meteor --mobile-server=127.0.0.1:3000
 
- npm run desktop -- init
- npm run desktop
-
- # or in one command `npm run desktop -- --scaffold`
+# open new terminal
+npm run desktop
 ```
+
+The first time, you can also combine `npm run desktop -- init` and `npm run desktop` into `npm run desktop -- --scaffold` once meteor is running.
 
 ## Usage `--help`
 
@@ -130,7 +130,6 @@ Documentation
         * [List of known plugins:](#list-of-known-plugins)
   * [Squirrel autoupdate support](#squirrel-autoupdate-support)
   * [Native modules support](#native-modules-support)
-  * [Devtron](#devtron)
   * [Testing desktop app and modules](#testing-desktop-app-and-modules)
   * [MD_LOG_LEVEL](#md_log_level)
   * [Packaging](#packaging)
@@ -238,7 +237,6 @@ field|description
 `version`|version of the desktop app
 `projectName`|this will be used as a `name` in the generated app's package.json
 `devTools`|whether to install and open `devTools`, set automatically to false when building with `--production`
-`devtron`|check whether to install [`devtron`](http://electron.atom.io/devtron/), set automatically to false when building with `--production`, [more](#devtron)
 `singleInstance`|sets the single instance mode - [more](https://github.com/electron/electron/blob/master/docs/api/app.md#appmakesingleinstancecallback)
 `desktopHCP`|whether to use `.desktop` hot code push module - [more](#desktophcp---desktop-hot-code-push)
 <sup>`desktopHCPIgnoreCompatibilityVersion`</sup>|ignore the `.desktop` compatibility version and install new versions even if they can be incompatible
@@ -327,6 +325,7 @@ event name|payload|description
 `beforfeLoadUrl`|`(port, lastPort)`|emitted before `webContents.loadURL` is invoked, in other words just before loading the Meteor app; `port` - the port on which the app is served, `lastPort` - the port on which the app was served previously (when HCP is applied)
 `beforeReload`|`(pendingVersion, containsDesktopUpdate)`|emitted just before HCP reload
 `moduleLoadFailed`|`(dirName, error)`|emitted if a module failed to load
+`childWindow`|`(openWindowHandlerResult, details)`| emitted when child window is created. Gives possibility to reject or set up BrowserWindowConstructorOptions. For details see [setWindowOpenHandler](https://www.electronjs.org/docs/latest/api/web-contents#contentssetwindowopenhandlerhandler)
 
 Your can also emit events on this bus as well. A good practice is to namespace them using dots,
 like for instance `myModule.initalized`.
@@ -489,9 +488,6 @@ not updated, nor checked for changes!
  in `.desktop` will not trigger rebuilds, in that case you need to make any
 change in `version` field in the `desktop.version` to trigger rebuild (this file is in the root of
 your project) - this can be any change like just adding random char to the hash
-- if your run a production build of your desktop app it will not receive updates from project run
- from `meteor` command unless you run it with `--production` - that is because development build
- has `devtron` added and therefore the `compatibilityVersion` is different  
 - after reload logs will no longer be shown in the console
 
 ## How to write plugins
@@ -536,14 +532,6 @@ https://github.com/ArekSredzki/electron-release-server
 
 This integration fully supports rebuilding native modules (npm packages with native node modules)
  against `Electron's` `node` version. The mechanism is enabled by default.
-
-## Devtron
-
-[`Devtron`](http://electron.atom.io/devtron/) is installed and activated by default. It is
-automatically removed when building with `--production`. As the communication between your Meteor
- app and the desktop side goes through IPC, this tool can be very handy because it can sniff on
- IPC messages.
-<kbd>![devtron IPC sniff](docs/devtron_ipc.gif)</kbd>
 
 ## Testing desktop app and modules
 
@@ -601,25 +589,35 @@ Currently there are some defaults provided only for `Windows` and `Mac`. If you 
 Change `target: ["appx"]` in `win` section of `builderOptions`. In case of problems please refer to
 [electron-builder](https://github.com/electron-userland/electron-builder) documentation.
 
-##### ! devEnvSetup.js !
-To help you contribute, there is a development environment setup script. If you have this repo
-cloned and already did a `npm install`, you can just run it with `node devEnvSetup.js`.
-However if you did not yet clone this repo just do:
-```
-mkdir tmp
-cd tmp
-wget https://raw.githubusercontent.com/wojtkowiak/meteor-desktop/master/devEnvSetup.js
-npm install cross-spawn shelljs npm
+## Developing meteor-desktop
+
+No matter which method below you choose, run `npm run build-watch` in your local meteor-desktop folder before making changes to the code, if you want them reflected in Meteor apps that depend on the package.
+
+### Using devEnvSetup.js
+To help you contribute, there is a development environment setup script. It also runs default tests.
+
+This script assumes you have `npm`, `git` and `meteor` available from the command line. Note that by default, the script will install packages in the *parent* directory of where it is, so it is recommended to clone meteor-desktop inside an empty dir.
+
+```bash
+mkdir meteor-desktop-dev && cd meteor-desktop-dev
+git clone https://github.com/Meteor-Community-Packages/meteor-desktop.git
+cd meteor-desktop
+npm install
 node devEnvSetup.js
 ```
-This script assumes you have `npm`, `git` and `meteor` available from the command line.
 
-Currently this package does not work when linked with `npm link`. To set up your dev environment
-it is best to create a clean `Meteor` project, add `@meteor-community/meteor-desktop` to dependencies with a relative
- path to the place where you have cloned this repo and in scripts add `desktop` with `node
- ./path/to/meteor-desktop/dist/bin/cli.js`.  
- Also to make changes in the desktop HCP plugins run `Meteor` project with `METEOR_PACKAGE_DIRS`
- set to `/absolute/path/to/meteor-desktop/plugins` so that they will be taken from the cloned repo.
+### Without using devEnvSetup.js
+
+1. Clone and install meteor-desktop as above
+2. From a clean Meteor project, install meteor-desktop from its local folder: `meteor npm i --save-dev /path/to/meteor-desktop` (doesn't work with npm link, tbc)
+3. In your Meteor app's `package.json`:
+   1. Add a script `desktop` with `METEOR_PACKAGE_DIRS=/path/to/meteor-desktop/plugins node /path/to/meteor-desktop/dist/bin/cli.js`
+   2. Add `METEOR_PACKAGE_DIRS=/path/to/meteor-desktop/plugins` to the `start` script as well.
+
+The last step is so that the desktop HCP Meteor packages are also taken from your local meteor-desktop repo. 
+Make sure to run Meteor with `meteor npm start` rather than just `meteor`.
+
+Finally, follow the above "Quick start" steps (except the npm install) from your Meteor app.
 
 ## Built with `meteor-desktop`
 

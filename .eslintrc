@@ -26,13 +26,13 @@
             "electron-debug",
             "rimraf",
             "process",
-            "devtron",
             "ava",
             "send",
             "meteor-desktop-test-suite"
         ]
     },
     "rules": {
+        "max-len": ["error", { "code": 120 }],
         "indent": [
             2,
             4,

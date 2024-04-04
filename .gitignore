@@ -3,6 +3,7 @@ node_modules
 dist
 tests/_tmp_
 tests/.__tmp_int
+tests/integration/chrome.log
 .npm
 .versions
 npm-debug*

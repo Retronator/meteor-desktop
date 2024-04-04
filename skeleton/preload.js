@@ -2,6 +2,7 @@
 // This was inspiried by
 // https://github.com/electron-webapps/meteor-electron/blob/master/app/preload.js
 const ipc = require('electron').ipcRenderer;
+const { contextBridge } = require('electron');
 
 const exposedModules = [];
 /**
@@ -29,6 +30,7 @@ const Desktop = new (class {
         this.fetchCallCounter = 0;
         this.fetchTimeoutTimers = {};
         this.fetchTimeout = 2000;
+        this.electron = {};
     }
 
     /**
@@ -81,12 +83,11 @@ const Desktop = new (class {
      */
     addToListeners(module, event, callback, once, response = false) {
         const self = this;
-        const eventName = response ? this.getResponseEventName(module, event) :
-            this.getEventName(module, event);
+        const eventName = response ? this.getResponseEventName(module, event) : this.getEventName(module, event);
 
         function handler(...args) {
             if (eventName in self.eventListeners) {
-                self.eventListeners[eventName].forEach(eventHandler => eventHandler(...args));
+                self.eventListeners[eventName].forEach((eventHandler) => eventHandler(...args));
             }
             if (eventName in self.onceEventListeners) {
                 self.onceEventListeners[eventName].forEach((eventHandler) => {
@@ -218,14 +219,13 @@ const Desktop = new (class {
         const fetchId = this.fetchCallCounter;
 
         return new Promise((resolve, reject) => {
-            this.once(module, `${event}_${fetchId}`,
-                (responseEvent, id, ...responseArgs) => {
-                    if (id === fetchId) {
-                        clearTimeout(this.fetchTimeoutTimers[fetchId]);
-                        delete this.fetchTimeoutTimers[fetchId];
-                        resolve(...responseArgs);
-                    }
-                }, true);
+            this.once(module, `${event}_${fetchId}`, (responseEvent, id, ...responseArgs) => {
+                if (id === fetchId) {
+                    clearTimeout(this.fetchTimeoutTimers[fetchId]);
+                    delete this.fetchTimeoutTimers[fetchId];
+                    resolve(...responseArgs);
+                }
+            }, true);
             this.fetchTimeoutTimers[fetchId] = setTimeout(() => {
                 reject('timeout');
             }, timeout);
@@ -290,29 +290,37 @@ const Desktop = new (class {
     getResponseEventName(module, event) {
         return `${this.getEventName(module, event)}___response`;
     }
+
+    asJSON() {
+        return {
+            electron: { webFrame: { getZoomFactor: () => 1 } },
+            fetch: (...args) => this.fetch(...args),
+            fetchAsset: (...args) => this.fetchAsset(...args),
+            fetchFile: (...args) => this.fetchFile(...args),
+            getAssetUrl: (...args) => this.getAssetUrl(...args),
+            getEventName: (...args) => this.getEventName(...args),
+            getFileUrl: (...args) => this.getFileUrl(...args),
+            on: (...args) => this.on(...args),
+            once: (...args) => this.once(...args),
+            removeAllListeners: (...args) => this.removeAllListeners(...args),
+            removeListener: (...args) => this.removeListener(...args),
+            respond: (...args) => this.respond(...args),
+            send: (...args) => this.send(...args),
+            sendGlobal: (...args) => this.sendGlobal(...args),
+            setDefaultFetchTimeout: (...args) => this.setDefaultFetchTimeout(...args)
+        };
+    }
 })();
 
-
 process.once('loaded', () => {
-    let devtron = null;
-
-    try {
-        devtron = require('devtron'); // eslint-disable-line global-require
-        global.__devtron = { require, process }; // eslint-disable-line no-underscore-dangle
-    } catch (e) {
-        // If that fails, then this is a production build and devtron is not available.
-    }
     if (process.env.NODE_ENV === 'test') {
         global.electronRequire = require;
         global.process = process;
     }
 
-    Desktop.devtron = devtron;
-    Desktop.electron = [];
-
     exposedModules.forEach((module) => {
         Desktop.electron[module] = require('electron')[module];
     });
-
-    global.Desktop = Desktop;
+    // exposeInMainWorld support only plain object with methods declared on first level
+    contextBridge.exposeInMainWorld('Desktop', Desktop.asJSON());
 });

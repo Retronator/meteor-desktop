@@ -70,7 +70,16 @@ export default class App {
         if (!this.isProduction()) {
             nodeModulesPath.splice(1, 0, '..');
         }
-        require('module').globalPaths.push(path.resolve(join(...nodeModulesPath)));
+
+        const GlobalModule = require('module');
+        const absoluteNodeModulesPath = path.resolve(join(...nodeModulesPath));
+        // for electron 16 or lower
+        GlobalModule.globalPaths.push(absoluteNodeModulesPath);
+        // for electron 17 or higher
+        // eslint-disable-next-line no-underscore-dangle
+        const nodeModulePaths = GlobalModule._nodeModulePaths;
+        // eslint-disable-next-line no-underscore-dangle
+        GlobalModule._nodeModulePaths = (from) => nodeModulePaths(from).concat([absoluteNodeModulesPath]);
 
         /**
          * DEPRECATED
@@ -182,8 +191,8 @@ export default class App {
             );
         } catch (e) {
             this.l.error(e);
-            dialog.showErrorBox('Application', 'Could not read settings.json. Please reinstall' +
-                ' this application.');
+            dialog.showErrorBox('Application', 'Could not read settings.json. Please reinstall'
+                + ' this application.');
 
             if (this.app && this.app.quit) {
                 this.app.quit();
@@ -235,12 +244,11 @@ export default class App {
             // Empty catch block... nasty...
         }
         setTimeout(() => {
-            dialog.showErrorBox('Application', 'Internal error occurred. Restart this ' +
-                'application. If the problem persists, contact support or try to reinstall.');
+            dialog.showErrorBox('Application', 'Internal error occurred. Restart this '
+                + 'application. If the problem persists, contact support or try to reinstall.');
             this.app.quit();
         }, 500);
     }
-
 
     /**
      * Applies dev, os specific and variables to window settings.
@@ -274,8 +282,8 @@ export default class App {
                         appSettings: this.settings,
                         eventsBus: this.eventsBus,
                         modules: this.modules,
-                        settings: typeof this.settings.plugins[plugin] === 'object' ?
-                            this.settings.plugins[plugin] : {},
+                        settings: typeof this.settings.plugins[plugin] === 'object'
+                            ? this.settings.plugins[plugin] : {},
                         Module
                     });
                 } catch (e) {
@@ -304,7 +312,7 @@ export default class App {
             moduleDirectories = fs.readdirSync(join(this.desktopPath, 'modules'));
         } catch (err) {
             if (err.code === 'ENOENT') {
-                this.l.debug(`not loading custom app modules because .desktop/modules isn't a directory`);
+                this.l.debug('not loading custom app modules because .desktop/modules isn\'t a directory');
             } else {
                 throw err;
             }
@@ -343,8 +351,7 @@ export default class App {
         }
         // Inject extractedFilesPath.
         if ('extract' in moduleJson) {
-            settings.extractedFilesPath =
-                join(__dirname, '..', 'extracted', moduleName);
+            settings.extractedFilesPath = join(__dirname, '..', 'extracted', moduleName);
         }
         return { settings, moduleName };
     }
@@ -358,7 +365,7 @@ export default class App {
     loadModule(internal, modulePath, dirName = '') {
         let moduleName = path.parse(modulePath).name;
         let settings = {};
-        let indexPath = '';
+        let indexPath;
 
         if (!internal) {
             // module.json is mandatory, but we can live without it.
@@ -407,7 +414,6 @@ export default class App {
     loadDesktopJs() {
         try {
             const desktopJsPath = join(this.desktopPath, 'desktop.js');
-
             const Desktop = require(desktopJsPath).default;
             this.desktop = new Desktop({
                 log: this.loggerManager.configureLogger('desktop'),
@@ -471,7 +477,6 @@ export default class App {
         }
         return Promise.all(promises);
     }
-
 
     /**
      * Initializes this app.
@@ -543,8 +548,7 @@ export default class App {
             bundleStorePath: this.userDataDir,
             customHCPUrl: this.settings.customHCPUrl || null,
             initialBundlePath: path.join(__dirname, '..', 'meteor.asar'),
-            webAppStartupTimeout: this.settings.webAppStartupTimeout ?
-                this.settings.webAppStartupTimeout : 20000
+            webAppStartupTimeout: this.settings.webAppStartupTimeout ? this.settings.webAppStartupTimeout : 20000
         };
     }
 
@@ -554,8 +558,8 @@ export default class App {
      */
     onStartupFailed(code) {
         this.emit('startupFailed');
-        dialog.showErrorBox('Startup error', 'Could not initialize app. Please contact' +
-            ` your support. Error code: ${code}`);
+        dialog.showErrorBox('Startup error', 'Could not initialize app. Please contact'
+            + ` your support. Error code: ${code}`);
         this.app.quit();
     }
 
@@ -582,8 +586,9 @@ export default class App {
         // this way.
         this.emit('windowSettings', windowSettings);
 
-        windowSettings.webPreferences.nodeIntegration = false; // node integration must to be off
+        windowSettings.webPreferences.nodeIntegration = false; // node integration must be off
         windowSettings.webPreferences.preload = join(__dirname, 'preload.js');
+        windowSettings.webPreferences.enableRemoteModule = true; // needed since Electron 10
 
         this.currentPort = port;
 
@@ -594,7 +599,7 @@ export default class App {
 
         this.webContents = this.window.webContents;
 
-        if (this.settings.devtron && !this.isProduction()) {
+        if (!this.isProduction()) {
             this.webContents.on('did-finish-load', () => {
                 // Print some fancy status to the console if in development.
                 this.webContents.executeJavaScript(`
@@ -604,13 +609,29 @@ export default class App {
                 box-shadow:0 1px 0 rgba(255,255,255,0.4) inset,0 5px 3px -5px rgba(0,0,0,0.5),
                 0 -13px 5px -10px rgba(255,255,255,0.4) inset;
                 line-height:20px;text-align:center;font-weight:700;font-size:20px\`);
-                console.log(\`%cdesktop version: ${this.settings.desktopVersion}\\n` +
-                    `desktop compatibility version: ${this.settings.compatibilityVersion}\\n` +
-                    'meteor bundle version:' +
-                    ` ${this.modules.autoupdate.currentAssetBundle.getVersion()}\\n\`` +
-                    ', \'font-size: 9px;color:#222\');');
+                console.log(\`%cdesktop version: ${this.settings.desktopVersion}\\n`
+                    + `desktop compatibility version: ${this.settings.compatibilityVersion}\\n`
+                    + 'meteor bundle version:'
+                    + ` ${this.modules.autoupdate.currentAssetBundle.getVersion()}\\n\``
+                    + ', \'font-size: 9px;color:#222\');');
             });
         }
+
+        this.webContents.setWindowOpenHandler((details) => {
+            const { url } = details;
+            const overrideOptions = url.startsWith('meteor://') ? {
+                overrideBrowserWindowOptions: {
+                    webPreferences: windowSettings.webPreferences,
+                    parent: this.window
+                }
+            } : {};
+            const result = {
+                action: 'allow',
+                ...overrideOptions
+            };
+            this.emit('childWindow', result, details);
+            return result;
+        });
 
         this.emit('windowCreated', this.window);
 
@@ -639,7 +660,7 @@ export default class App {
                 (request, callback) => {
                     const url = request.url.substr(urlStripLength);
                     this.modules.localServer.getStreamProtocolResponse(url)
-                        .then(res => callback(res))
+                        .then((res) => callback(res))
                         .catch((e) => {
                             callback(this.modules.localServer.getServerErrorResponse());
                             this.log.error(`error while trying to fetch ${url}: ${e.toString()}`);
@@ -675,8 +696,7 @@ export default class App {
         }
         if (!this.windowAlreadyLoaded) {
             if (this.meteorAppVersionChange) {
-                this.l.verbose('there is a new version downloaded already, performing HCP' +
-                    ' reset');
+                this.l.verbose('there is a new version downloaded already, performing HCP reset');
                 this.updateToNewVersion();
             } else {
                 this.windowAlreadyLoaded = true;
@@ -684,9 +704,6 @@ export default class App {
                 this.emit('beforeLoadFinish');
                 this.window.show();
                 this.window.focus();
-                if (this.settings.devtron && !this.isProduction()) {
-                    this.webContents.executeJavaScript('Desktop.devtron.install()');
-                }
             }
         } else {
             this.l.debug('window already loaded');
@@ -702,8 +719,7 @@ export default class App {
 
         this.l.verbose(`${this.settings.desktopVersion} !== ${this.pendingDesktopVersion}`);
 
-        const desktopUpdate = this.settings.desktopHCP &&
-            this.settings.desktopVersion !== this.pendingDesktopVersion;
+        const desktopUpdate = this.settings.desktopHCP && this.settings.desktopVersion !== this.pendingDesktopVersion;
 
         this.emit(
             'beforeReload', this.modules.autoupdate.getPendingVersion(), desktopUpdate

@@ -3,7 +3,6 @@
     "version": "0.0.1",
     "projectName": "MyMeteorApp",
     "devTools": true,
-    "devtron": true,
     "desktopHCP": true,
     "desktopHCPIgnoreCompatibilityVersion": false,
     "squirrel": {

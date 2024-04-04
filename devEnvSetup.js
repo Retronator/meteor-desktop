@@ -1,10 +1,10 @@
 require('shelljs/global');
-var path = require('path');
-var readline = require('readline');
-var fs = require('fs');
-var crossSpawn = require('cross-spawn');
+const path = require('path');
+const readline = require('readline');
+const fs = require('fs');
+const crossSpawn = require('cross-spawn');
 
-var rl;
+let rl;
 
 console.log('\n');
 console.log('┌┬┐┌─┐┌┬┐┌─┐┌─┐┬─┐  ┌┬┐┌─┐┌─┐┬┌─┌┬┐┌─┐┌─┐');
@@ -16,9 +16,10 @@ console.log('\n');
 console.log('This script will git clone other meteor-desktop related repos and create a test' +
     ' application.\n\n');
 
-var projectsDir = path.resolve('./..');
-var resolvedPath;
-var npm = path.resolve('./node_modules/.bin/npm');
+const projectsDir = path.resolve('./..');
+const npm = 'npm'; // Or use a custom explicit path, just as path.resolve('./node_modules/.bin/npm')
+let resolvedPath;
+let runTests = false;
 
 console.log('Assuming your projects directory is: ' + projectsDir + '\n\n');
 
@@ -59,12 +60,12 @@ function finish() {
         ' options set in `settings.json` so it will also use linked plugins.');
 }
 
-var cloneMeteorDesktop = false;
-var forks = false;
-var username = '';
-var projects = [ 'meteor-desktop-test-suite', 'meteor-desktop-splash-screen' ];
+let cloneMeteorDesktop = false;
+let forks = false;
+let username = '';
+const projects = [ 'meteor-desktop-test-suite', 'meteor-desktop-splash-screen' ];
 
-question('Do you want to use another path (yes/no)? ')
+question('Do you want to use another path (yes/no [no])? ')
     .then(function(answer) {
         answer = answer.toLowerCase();
         if (answer === 'y' || answer === 'yes') {
@@ -112,7 +113,7 @@ question('Do you want to use another path (yes/no)? ')
                 exec('git clone ' + projectRepo);
             });
         } else {
-            var code;
+            let code;
             projects.forEach(function (project) {
                 code = exec('git clone https://github.com/' + username + '/' + project).code;
                 if (code !== 0) {
@@ -140,7 +141,7 @@ question('Do you want to use another path (yes/no)? ')
             });
         }
         console.log('\nCreating meteor-desktop-test-app');
-        exec('meteor create meteor-desktop-test-app --release=METEOR@2.6');
+        exec('meteor create meteor-desktop-test-app --release=2.6.1');
 
         console.log('Installing deps in meteor-desktop...\n');
         return spawn(npm, ['install'], path.join(resolvedPath, 'meteor-desktop'));
@@ -174,46 +175,53 @@ question('Do you want to use another path (yes/no)? ')
         exec(npm + ' install --save-dev cross-env');
         exec(npm + ' install --save @babel/runtime');
         cd(resolvedPath);
-        var packageJsonPath = path.join(resolvedPath, 'meteor-desktop-test-app', 'package.json');
-        var packageJson = JSON.parse(fs.readFileSync(packageJsonPath), 'utf8');
+        const packageJsonPath = path.join(resolvedPath, 'meteor-desktop-test-app', 'package.json');
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath), 'utf8');
         packageJson.scripts.desktop = 'cross-env METEOR_PACKAGE_DIRS=' + path.join(resolvedPath, 'meteor-desktop', 'plugins') + ' node ../meteor-desktop/dist/bin/cli.js';
-        packageJson.scripts.start = 'cross-env METEOR_PACKAGE_DIRS=' + path.join(resolvedPath, 'meteor-desktop', 'plugins') + ' meteor run' ;
+        packageJson.scripts.start = 'cross-env METEOR_PACKAGE_DIRS=' + path.join(resolvedPath, 'meteor-desktop', 'plugins') + ' meteor run';
         fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
 
         console.log('Running npm run desktop -- init');
         exec(npm + ' run desktop -- init', { cwd: path.join(resolvedPath, 'meteor-desktop-test-app') });
 
-        var settingsJsonPath = path.join(resolvedPath, 'meteor-desktop-test-app', '.desktop', 'settings.json');
-        var settingsJson = JSON.parse(fs.readFileSync(settingsJsonPath), 'utf8');
+        const settingsJsonPath = path.join(resolvedPath, 'meteor-desktop-test-app', '.desktop', 'settings.json');
+        const settingsJson = JSON.parse(fs.readFileSync(settingsJsonPath), 'utf8');
         settingsJson.linkPackages = ['meteor-desktop-splash-screen'];
         fs.writeFileSync(settingsJsonPath, JSON.stringify(settingsJson, null, 2));
-
-        return spawn(npm, ['run', 'desktop', '--', 'init-tests-support'], path.join(resolvedPath, 'meteor-desktop-test-app'));
     })
     .then(function() {
         console.log('\n\n\n');
-        return question('Do you want to run tests (yes/no)? ');
+        return question('Do you want to run tests (yes/no [yes])? ');
     })
     .then(function(answer) {
         answer = answer.toLowerCase();
-        if (answer === 'n' || answer === 'no') {
-            finish();
-        }
+        runTests = (answer !== 'n' && answer !== 'no');
+    })
+    .then(function() {
+        if (!runTests) return;
         return spawn(npm, ['run', 'test'], path.join(resolvedPath, 'meteor-desktop'));
     })
     .then(function() {
+        if (!runTests) return;
         return spawn(npm, ['run', 'test'], path.join(resolvedPath, 'meteor-desktop-splash-screen'));
     })
     .then(function() {
-        return spawn(npm, ['run', 'test'], path.join(resolvedPath, 'meteor-desktop-localstorage'));
-    })
-    .then(function() {
+        if (!runTests) return;
+        // Consider manually running `npm run test-integration` in meteor-desktop/, which also runs
+        // `desktop -- build -b` but tests its output and runs more tests. Not done automatically
+        // here because test-integration creates its own temp meteor project (a different approach
+        // to this script, which uses meteor-desktop-test-app) and overlaps this test here.
         return spawn(npm, ['run', 'desktop', '--', 'build', '-b'], path.join(resolvedPath, 'meteor-desktop-test-app'));
     })
     .then(function() {
+        if (!runTests) return;
+        return spawn(npm, ['run', 'desktop', '--', 'init-tests-support'], path.join(resolvedPath, 'meteor-desktop-test-app'));
+    })
+    .then(function() {
+        if (!runTests) return;
         return spawn(npm, ['run', 'test-desktop'], path.join(resolvedPath, 'meteor-desktop-test-app'));
     })
     .then(function() {
-      finish();
+        finish();
     })
     .catch(function(e) { console.log(e); });

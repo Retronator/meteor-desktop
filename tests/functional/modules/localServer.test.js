@@ -57,7 +57,7 @@ function getLocalServer(bundlePath, settings) {
 }
 
 // Takes a stream protocol response and wraps it into fetch like response object.
-// It only maps whatever is neccessary to run the tests.
+// It only maps whatever is necessary to run the tests.
 // https://github.com/electron/electron/blob/master/docs/api/structures/stream-protocol-response.md
 
 class FakeFetchResponse {
@@ -198,7 +198,7 @@ function localServerTests(useStreams = false) {
 
         it('should set application/woff for a .woff file', async () => {
             const response = await fetchFromLocalServer('/some-font.woff');
-            expect(response.headers.get('Content-Type')).to.contain('application/font-woff');
+            expect(response.headers.get('Content-Type')).to.contain('font/woff');
         });
 
         it('should set application/octet-stream for files without an extension', async () => {
@@ -298,9 +298,9 @@ describe('localServer', () => {
         it('should server cordova.js file', async () => {
             const response =
                 await fetchFromLocalServer('/cordova.js');
-                const body = await response.text();
-                expect(body).to.contain('window.cordova');
-                expect(body).to.contain('module.exports = cordova;');
+            const body = await response.text();
+            expect(body).to.contain('window.cordova');
+            expect(body).to.contain('module.exports = cordova;');
         });
     });
 });
