@@ -814,7 +814,8 @@ class MeteorDesktopBundler {
             }
             const preset = babelPresetEnv({
                 version: this.getPackageJsonField('dependencies')['@babel/preset-env'],
-                assertVersion: () => { }
+                assertVersion: () => { },
+                caller: () => true // HACK: Dummy method that assumes the browser supports everything.
             }, { targets: { node: '14' } });
 
             this.stampPerformance('babel/uglify');
